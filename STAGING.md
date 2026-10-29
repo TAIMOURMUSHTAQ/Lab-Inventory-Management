@@ -1,4 +1,9 @@
-# Staging deployment
+git init
+git add .
+git commit -m "Prepare lab kit tracker staging"
+git branch -M main
+git remote add origin https://github.com/OWNER/lab-kit-tracker.git
+git push -u origin main# Staging deployment
 
 ## Recommended setup
 
@@ -32,6 +37,9 @@ with disposable fixtures, never for inventory records.
 - [ ] HTTPS URL opens on iPhone Safari
 - [ ] Camera permission is granted
 - [ ] Barcode fills the serial
+- [ ] The deployed URL is opened on the phone itself, not only in a Mac tab
+- [ ] The rear camera is selected on iPhone
+- [ ] A label photo can be used when live OCR is difficult
 - [ ] OCR fills kit type, lot, expiry, and visit
 - [ ] User can correct a field before saving
 - [ ] Duplicate serial is rejected

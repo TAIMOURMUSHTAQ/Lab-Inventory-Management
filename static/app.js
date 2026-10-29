@@ -296,6 +296,8 @@
       form = `
         <form id="useForm" class="stack">
           <label>Kit serial (from the scanner)<input name="serial" autocomplete="off" placeholder="Scan the box" required></label>
+          <button type="button" class="big" id="openUseReader">Scan box with phone camera</button>
+          <div id="readerBox"></div>
           <label>Participant initials<input name="participant" maxlength="4" autocapitalize="characters" placeholder="e.g. SM" required></label>
           <label>Visit<select name="visit">${optionsFor(allVisits, "")}<option value="__other">Other (give a reason)</option></select></label>
           <label>Reason (only if the visit is not planned for this kit)<input name="reason" placeholder="Reason"></label>
@@ -464,6 +466,7 @@
     });
 
     const ro = $("#openReader"); if (ro) ro.addEventListener("click", openReader);
+    const uro = $("#openUseReader"); if (uro) uro.addEventListener("click", () => openReader("use"));
     const ex = $("#exportCsv"); if (ex) ex.addEventListener("click", exportCsvLocal);
   }
 
@@ -490,7 +493,7 @@
   }
 
   // ---------- camera + on-device reading ----------
-  function openReader() {
+  function openReader(target = "receive") {
     const box = $("#readerBox");
     if (!box) return;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -506,9 +509,12 @@
           <button id="readNow" class="primary big">Read label</button>
           <button id="closeReader" class="big">Close camera</button>
         </div>
+        <label>Or take a label photo<input id="labelPhoto" type="file" accept="image/*" capture="environment"></label>
         <div id="readOut" class="small"></div>
       </div>`;
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
+    const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const video = mobile ? { facingMode: { exact: "environment" } } : { facingMode: "user" };
+    navigator.mediaDevices.getUserMedia({ video, audio: false })
       .then((stream) => {
         S.reader = { stream };
         const v = $("#cam");
@@ -517,6 +523,7 @@
       .catch(() => { $("#readOut").innerHTML = '<span class="err">Camera permission was refused. Allow it in Settings, then try again.</span>'; });
     $("#readNow").addEventListener("click", readNow);
     $("#closeReader").addEventListener("click", closeReader);
+    $("#labelPhoto").addEventListener("change", (e) => readPhoto(e.target.files[0]));
   }
 
   function closeReader() {
@@ -611,13 +618,32 @@
       return;
     }
     btn.disabled = false;
-    fillFromReading(best.parsed);
+    fillFromReading(best.parsed, S.mode);
   }
 
-  function fillFromReading(p) {
-    const f = $("#receiveForm");
+  async function readPhoto(file) {
+    const out = $("#readOut");
+    if (!file || !out) return;
+    out.textContent = "Reading photo…";
+    try {
+      const worker = await getOcr();
+      const { data } = await worker.recognize(file);
+      fillFromReading(window.LabelReader.parseLabel(data.text), S.mode);
+    } catch (e) {
+      out.innerHTML = '<span class="err">Could not read that photo. Take a closer, sharper photo with the label upright.</span>';
+    }
+  }
+
+  function fillFromReading(p, target = "receive") {
+    const f = target === "use" ? $("#useForm") : $("#receiveForm");
     if (!f) return;
     if (p.serial) f.serial.value = p.serial;
+    if (target === "use") {
+      $("#readOut").innerHTML = p.serial
+        ? '<span class="ok">Serial captured. Select the visit and record use.</span>'
+        : '<span class="err">Serial not detected. Move closer and try again.</span>';
+      return;
+    }
     if (p.kit_type) f.kit_type.value = p.kit_type;
     if (p.lot) f.lot.value = p.lot;
     if (p.expiry) f.expiry.value = p.expiry;

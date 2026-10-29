@@ -24,6 +24,7 @@ The local application was checked through the browser and server boundary:
 | QA-003 | High | Receive API | The server accepted unknown kit types, blank lots, and malformed/nonexistent expiry dates when requests bypassed the UI. | The server now validates kit types A-J, requires a lot, and requires a real ISO `YYYY-MM-DD` date. |
 | QA-004 | Medium | Remove details | The optional details field was displayed but discarded before sync. | Details are appended to the persisted removal reason so the audit and stock sheet retain them. |
 | QA-005 | Medium | Sync API | A non-list `events` value or a non-object event could cause an exception instead of a clear client error. | The endpoint now returns HTTP 400 for a non-list and a rejected result for each malformed event object. |
+| QA-006 | High | Phone scanning | The receive reader could use the wrong camera on desktop, and the use workflow had no phone-camera scan action. | Mobile devices now request the rear camera, use mode has its own scan button, and label-photo OCR is available as a fallback. |
 
 ## Remaining risks before hosting
 

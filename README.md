@@ -28,12 +28,14 @@ SQLite staging database from disappearing on restart.
 
 - **Sign in:** each person has their own login. The session lasts one 8-hour
   shift, and the server logs out after 30 minutes idle.
-- **Receive:** use the iPhone camera to read the barcode and label. Barcode
+- **Receive:** open the deployed HTTPS link directly on the iPhone and use its
+  rear camera to read the barcode and label. The barcode is intentionally only
+  the box serial/key; OCR reads the printed label fields separately. Barcode
   capture fills the serial and OCR fills kit type, lot, expiry, and visit.
-  Manual entry is a fallback.
-- **Use:** scan the box with the iPhone camera, enter participant initials and
-  the visit. The configured protocol quantity is deducted automatically. A
-  visit not planned for that kit needs a reason.
+  A phone photo and manual entry are fallbacks.
+- **Use:** scan the box again with the iPhone camera, enter participant
+  initials, and select the participant visit. The configured protocol quantity
+  is deducted automatically. A visit not planned for that kit needs a reason.
 - **Remove:** a reason is required (expired, damaged, recall, other).
 - **Sign off:** records that a visit was signed off.
 - **Sheet:** all kits on the device, with pending items marked. Download as
