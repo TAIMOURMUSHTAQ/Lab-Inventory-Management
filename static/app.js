@@ -559,16 +559,18 @@
     return ocrWorker;
   }
 
-  // Draws the frame turned by `deg`, scaled 2x, with contrast stretched to black and white.
-  function prepared(video, deg, scale) {
+  // Rotates, crops, enlarges, and contrast-stretches the label before OCR.
+  function prepared(source, deg, scale, crop = 1) {
     const src = document.createElement("canvas");
-    const vw = video.videoWidth, vh = video.videoHeight;
+    const vw = source.videoWidth || source.width;
+    const vh = source.videoHeight || source.height;
     const swap = deg === 90 || deg === 270;
-    src.width = swap ? vh : vw; src.height = swap ? vw : vh;
+    const cw = vw * crop, ch = vh * crop;
+    src.width = swap ? ch : cw; src.height = swap ? cw : ch;
     const sctx = src.getContext("2d");
     sctx.translate(src.width / 2, src.height / 2);
     sctx.rotate((deg * Math.PI) / 180);
-    sctx.drawImage(video, -vw / 2, -vh / 2, vw, vh);
+    sctx.drawImage(source, -cw / 2, -ch / 2, cw, ch);
     const out = document.createElement("canvas");
     out.width = src.width * scale; out.height = src.height * scale;
     const octx = out.getContext("2d");
@@ -602,11 +604,12 @@
       const worker = await getOcr();
       const score = (p) => (p.serial ? 1 : 0) + (p.kit_type ? 1 : 0) +
         (p.lot ? 1 : 0) + (p.expiry ? 1 : 0);
-      const tries = [[270, 2], [90, 2], [0, 2], [270, 3], [90, 3]];
+      const tries = [[0, 3, 0.8], [90, 3, 0.8], [270, 3, 0.8],
+                     [0, 3, 1], [90, 2, 1], [270, 2, 1]];
       for (let i = 0; i < tries.length; i++) {
-        const [deg, scale] = tries[i];
+        const [deg, scale, crop] = tries[i];
         out.textContent = `Reading… (${i + 1} of ${tries.length})`;
-        const { data } = await worker.recognize(prepared(video, deg, scale));
+        const { data } = await worker.recognize(prepared(video, deg, scale, crop));
         const parsed = window.LabelReader.parseLabel(data.text);
         if (!best || score(parsed) > score(best.parsed)) best = { parsed, deg, scale };
         if (score(best.parsed) === 4) break;
@@ -627,8 +630,29 @@
     out.textContent = "Reading photo…";
     try {
       const worker = await getOcr();
-      const { data } = await worker.recognize(file);
-      fillFromReading(window.LabelReader.parseLabel(data.text), S.mode);
+      const image = typeof createImageBitmap === "function"
+        ? await createImageBitmap(file)
+        : await new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => resolve(image);
+            image.onerror = reject;
+            image.src = URL.createObjectURL(file);
+          });
+      let best = null;
+      const tries = [[0, 3, 0.8], [90, 3, 0.8], [270, 3, 0.8],
+                     [0, 3, 1], [90, 2, 1], [270, 2, 1]];
+      const score = (p) => (p.serial ? 1 : 0) + (p.kit_type ? 1 : 0) +
+        (p.lot ? 1 : 0) + (p.expiry ? 1 : 0) + (p.visits.length ? 1 : 0);
+      for (let i = 0; i < tries.length; i++) {
+        out.textContent = `Reading photo… (${i + 1} of ${tries.length})`;
+        const [deg, scale, crop] = tries[i];
+        const { data } = await worker.recognize(prepared(image, deg, scale, crop));
+        const parsed = window.LabelReader.parseLabel(data.text);
+        if (!best || score(parsed) > score(best)) best = parsed;
+        if (score(best) >= 5) break;
+      }
+      if (image.close) image.close();
+      fillFromReading(best || window.LabelReader.parseLabel(""), S.mode);
     } catch (e) {
       out.innerHTML = '<span class="err">Could not read that photo. Take a closer, sharper photo with the label upright.</span>';
     }

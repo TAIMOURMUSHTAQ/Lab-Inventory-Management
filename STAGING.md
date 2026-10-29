@@ -40,6 +40,9 @@ with disposable fixtures, never for inventory records.
 - [ ] The deployed URL is opened on the phone itself, not only in a Mac tab
 - [ ] The rear camera is selected on iPhone
 - [ ] A label photo can be used when live OCR is difficult
+- [ ] OCR is tested with the label rotated 0, 90, and 270 degrees
+- [ ] OCR is tested with expiry adjacent to lot text
+- [ ] OCR result is reviewed before saving
 - [ ] OCR fills kit type, lot, expiry, and visit
 - [ ] User can correct a field before saving
 - [ ] Duplicate serial is rejected

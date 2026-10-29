@@ -55,7 +55,9 @@ SQLite staging database from disappearing on restart.
 ## Label reading
 
 - Reads kit type, lot, expiry and visit from the printed text. The serial comes
-  from the scanner, not the camera.
+  from the phone barcode detector or OCR. The reader runs several rotated,
+  cropped, enlarged, contrast-stretched passes and can OCR a still photo when
+  live video is difficult.
 - Tested on the 10 sample boxes (see below). Always check every field against
   the box before saving.
 

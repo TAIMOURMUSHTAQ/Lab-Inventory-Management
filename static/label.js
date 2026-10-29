@@ -1,23 +1,27 @@
 /* Reads the printed text on a kit box label.
- * Works in the browser and in Node (for tests). The serial is NOT read here:
- * the scanner provides it. This only picks out the printed fields and checks
- * each one, so a value is never put in the wrong column. */
+ * Works in the browser and in Node (for tests). It extracts printed fields
+ * independently so a value is never put in the wrong column. */
 (function (root) {
   const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
                    jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
 
   // "31-Jan-2027" (OCR may drop or add spaces or dashes) -> "2027-01-31"
   function parseExpiry(text) {
-    const m = /(\d{1,2})\s*[-\s.]?\s*([A-Za-z]{3})\s*[-\s.]?\s*(\d{4})/.exec(text);
-    if (!m) return null;
-    const mo = MONTHS[m[2].toLowerCase()];
-    if (!mo) return null;
-    const d = +m[1];
-    const y = +m[3];
-    if (d < 1 || d > 31 || y < 2020 || y > 2100) return null;
-    const daysInMonth = new Date(Date.UTC(y, mo, 0)).getUTCDate();
-    if (d > daysInMonth) return null;
-    return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    const candidates = [
+      ...text.matchAll(/(\d{1,2})\s*[-\s./]?\s*([A-Za-z]{3})\s*[-\s./]?\s*(\d{4})/g),
+      ...text.matchAll(/(\d{1,2})\s*[-./]\s*(\d{1,2})\s*[-./]\s*(\d{4})/g),
+    ];
+    for (const m of candidates) {
+      const month = m[2].match(/^\d+$/) ? +m[2] : MONTHS[m[2].toLowerCase()];
+      const d = +m[1];
+      const y = +(m[3] || m[4]);
+      if (!month || d < 1 || d > 31 || y < 2020 || y > 2100) continue;
+      const daysInMonth = new Date(Date.UTC(y, month, 0)).getUTCDate();
+      if (d <= daysInMonth) {
+        return `${y}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      }
+    }
+    return null;
   }
 
   function parseLabel(raw) {
