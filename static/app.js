@@ -593,6 +593,19 @@
     return out;
   }
 
+  function mergeParsed(current, next) {
+    if (!current) return next;
+    return {
+      serial: current.serial || next.serial,
+      kit_type: current.kit_type || next.kit_type,
+      protocol: current.protocol || next.protocol,
+      lot: current.lot || next.lot,
+      expiry: current.expiry || next.expiry,
+      visits: current.visits.length ? current.visits : next.visits,
+      problems: [...new Set([...(current.problems || []), ...(next.problems || [])])],
+    };
+  }
+
   async function readNow() {
     const video = $("#cam");
     const out = $("#readOut");
@@ -603,16 +616,16 @@
       const barcode = await readBarcode(video);
       const worker = await getOcr();
       const score = (p) => (p.serial ? 1 : 0) + (p.kit_type ? 1 : 0) +
-        (p.lot ? 1 : 0) + (p.expiry ? 1 : 0);
-      const tries = [[0, 3, 0.8], [90, 3, 0.8], [270, 3, 0.8],
-                     [0, 3, 1], [90, 2, 1], [270, 2, 1]];
+        (p.lot ? 1 : 0) + (p.expiry ? 1 : 0) + (p.visits.length ? 1 : 0);
+      const tries = [[0, 3, 0.8], [90, 3, 0.8], [180, 3, 0.8], [270, 3, 0.8],
+                     [0, 3, 1], [90, 2, 1], [180, 2, 1], [270, 2, 1]];
       for (let i = 0; i < tries.length; i++) {
         const [deg, scale, crop] = tries[i];
         out.textContent = `Reading… (${i + 1} of ${tries.length})`;
         const { data } = await worker.recognize(prepared(video, deg, scale, crop));
         const parsed = window.LabelReader.parseLabel(data.text);
-        if (!best || score(parsed) > score(best.parsed)) best = { parsed, deg, scale };
-        if (score(best.parsed) === 4) break;
+        best = { parsed: mergeParsed(best && best.parsed, parsed), deg, scale };
+        if (score(best.parsed) === 5) break;
       }
       if (barcode) best.parsed.serial = barcode;
     } catch (e) {
@@ -639,8 +652,8 @@
             image.src = URL.createObjectURL(file);
           });
       let best = null;
-      const tries = [[0, 3, 0.8], [90, 3, 0.8], [270, 3, 0.8],
-                     [0, 3, 1], [90, 2, 1], [270, 2, 1]];
+      const tries = [[0, 3, 0.8], [90, 3, 0.8], [180, 3, 0.8], [270, 3, 0.8],
+                     [0, 3, 1], [90, 2, 1], [180, 2, 1], [270, 2, 1]];
       const score = (p) => (p.serial ? 1 : 0) + (p.kit_type ? 1 : 0) +
         (p.lot ? 1 : 0) + (p.expiry ? 1 : 0) + (p.visits.length ? 1 : 0);
       for (let i = 0; i < tries.length; i++) {
@@ -648,7 +661,7 @@
         const [deg, scale, crop] = tries[i];
         const { data } = await worker.recognize(prepared(image, deg, scale, crop));
         const parsed = window.LabelReader.parseLabel(data.text);
-        if (!best || score(parsed) > score(best)) best = parsed;
+        best = mergeParsed(best, parsed);
         if (score(best) >= 5) break;
       }
       if (image.close) image.close();

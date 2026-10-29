@@ -26,6 +26,7 @@ The local application was checked through the browser and server boundary:
 | QA-005 | Medium | Sync API | A non-list `events` value or a non-object event could cause an exception instead of a clear client error. | The endpoint now returns HTTP 400 for a non-list and a rejected result for each malformed event object. |
 | QA-006 | High | Phone scanning | The receive reader could use the wrong camera on desktop, and the use workflow had no phone-camera scan action. | Mobile devices now request the rear camera, use mode has its own scan button, and label-photo OCR is available as a fallback. |
 | QA-007 | High | OCR accuracy | Small rotated label text, especially compact expiry text adjacent to lot text, was often missed by a single full-frame OCR pass. | The free local reader now runs rotated, cropped, enlarged, contrast-stretched passes and supports photo OCR; date parsing accepts compact and numeric separators while validating real calendar dates. |
+| QA-008 | High | OCR result selection | The reader selected only one “best” OCR pass, so a pass that found the expiry could be discarded when another pass found the kit type. | OCR passes now merge valid fields across rotations/crops before presenting the result. |
 
 ## Remaining risks before hosting
 

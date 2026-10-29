@@ -25,26 +25,29 @@
   }
 
   function parseLabel(raw) {
-    const text = String(raw || "");
+    const text = String(raw || "").replace(/[|]/g, "I");
+    const compact = text.replace(/\s+/g, " ").trim();
     const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     const out = { serial: "", kit_type: "", protocol: "", lot: "", expiry: "", visits: [], problems: [] };
 
-    const serials = text.match(/\b\d{8,14}\b/g) || [];
+    const serials = compact.match(/\b\d{8,14}\b/g) || [];
     if (serials.length) out.serial = serials[serials.length - 1];
 
-    const kit = /K\w{1,2}\s*Type\s*([A-Z])\b/i.exec(text) || /\bType\s*([A-J])\b/.exec(text);
+    const kit = /\bKit\s*Type\s*([A-J])\b/i.exec(compact) ||
+      /\bK\w{0,3}\s*Type\s*([A-J])\b/i.exec(compact) ||
+      /\bType\s*([A-J])\b/i.exec(compact);
     if (kit) out.kit_type = kit[1].toUpperCase();
     else out.problems.push("Kit type not found");
 
-    const proto = /TAK-\d{3}-\d{4}/.exec(text);
+    const proto = /TAK\s*[-–—]?\s*\d{3}\s*[-–—]\s*\d{4}/i.exec(compact);
     if (proto) out.protocol = proto[0];
 
     // Lot numbers look like TKDA0215-TPCUS535228 or TKDA0215-248128
-    const lot = /TKDA[0-9OQ]{3,4}-[A-Z0-9]{5,}/i.exec(text);
-    if (lot) out.lot = lot[0].toUpperCase().replace(/(?<=\d)O|O(?=\d)/g, "0");
+    const lot = /TKDA\s*[0-9OQ]{3,4}\s*[-–—]\s*[A-Z0-9]{5,}/i.exec(compact);
+    if (lot) out.lot = lot[0].toUpperCase().replace(/\s+/g, "").replace(/(?<=\d)O|O(?=\d)/g, "0");
     else out.problems.push("Lot not found");
 
-    const exp = parseExpiry(text);
+    const exp = parseExpiry(compact);
     if (exp) out.expiry = exp;
     else out.problems.push("Expiry date not found");
 
@@ -54,6 +57,10 @@
       let v = lines[vi].replace(/.*Visit\(?s?\)?\s*:?/i, "").trim();
       if (!v && lines[vi + 1]) v = lines[vi + 1];
       out.visits = v.split(/\s*,\s*/).map((s) => s.trim()).filter(Boolean);
+    }
+    if (!out.visits.length) {
+      const visit = /Day\s*[-–—]?\s*\d+(?:\s*,\s*(?:Early\s*Term|At\s*Discharge))?/i.exec(compact);
+      if (visit) out.visits = [visit[0].replace(/\s+/g, " ").trim()];
     }
     if (!out.visits.length) out.problems.push("Visit not found");
 
