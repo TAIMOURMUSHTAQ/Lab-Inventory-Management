@@ -1,0 +1,9 @@
+{
+  "name": "Lab kit tracker",
+  "short_name": "Kit tracker",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F4F7F7",
+  "theme_color": "#1B7875",
+  "icons": []
+}

@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: lab-kit-tracker-staging
+    runtime: docker
+    plan: starter
+    healthCheckPath: /
+    envVars:
+      - key: KIT_SECRET
+        generateValue: true
+      - key: KIT_DB
+        value: /data/kits.db
+    disk:
+      name: kit-data
+      mountPath: /data
+      sizeGB: 1
