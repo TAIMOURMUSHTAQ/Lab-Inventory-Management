@@ -30,6 +30,10 @@ The local application was checked through the browser and server boundary:
 | QA-009 | High | Live camera | Live video reading was slow and unreliable on phones. | Removed. Take photo and upload now use one still-image reader, with phone photos limited to a size phone browsers can draw. |
 | QA-010 | High | Kit types | Kit K and later were refused by the server and missed by the label reader, and a capital I read as a lowercase l would have become L. | Any letter is accepted, and `l` is read as `I`. |
 | QA-011 | Medium | Form entry | Any re-render, such as a background send finishing, could erase what was being typed or read. | Forms keep their values across re-renders and clear only after a successful save. |
+| QA-012 | High | Phone updates | The offline cache served saved app files first, so phones could keep an old release after a deploy. | App files now come from the network first, the page reloads once on a new release, and the version is shown beside the email. |
+| QA-013 | High | Serial reading | Serials were read from text only on iPhone, and PPD serials contain a letter O that was treated as a zero. | A bundled barcode decoder reads the serial, the letter O is kept, and a barcode that disagrees with the printed number asks for a check. |
+| QA-014 | High | Small print | The tiny lot and expiry line was often missed, tilted photos lost most fields, and the first value read always won. | The photo is straightened, the small lines are cropped and enlarged, and reads vote. Disagreement on a date shows "Please check". |
+| QA-015 | High | Study structure | Studies, protocols and visits were separate forms, and participants were only typed initials. | A study is now one record that owns its schedule, kits, participants, and inventory, on one page, following CRISP. Existing protocols upgrade into studies and kits stay allocated. |
 
 ## Remaining risks before hosting
 

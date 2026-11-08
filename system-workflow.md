@@ -14,48 +14,53 @@ connection, then synchronizes them when connectivity returns.
 4. The device may continue an already authenticated shift offline; first-time
    sign-in still requires a connection.
 
-## Studies, protocols and visits
+## Studies
 
-A study has protocols. A protocol has a visit schedule, and each visit lists the
-kit types it needs. The current records are dummy data. Admin can add more.
+A study is one record: its ID as printed on the label, title, sponsor, principal
+investigator, phase and status. It owns its visit schedule, the kit types each
+visit needs, its participants, and its allocated kits. There is no separate
+protocol record. The current records are dummy data.
+
+Open a study card to see and change all of this on one page. A visit with
+signed-off participants cannot be removed.
 
 ## Receive workflow
 
-1. Select **Take photo** or **Upload image**. Both use the same reader.
+1. Select **Take photo** or **Upload image**. Both read the same still photo.
 2. The reader fills the serial, kit type and expiry, and the lot when readable.
-   A barcode fills the serial only if OCR misses it and the browser supports
-   barcode reading.
 3. The app suggests where the kit goes:
-   - the protocol printed on the label, if it is a configured protocol code
-   - otherwise the only protocol needing that kit type
-   - if several need it, the person chooses a protocol or unallocated stock
+   - the study ID printed on the label, if it is a configured study
+   - otherwise the only study needing that kit type
+   - if several need it, the person chooses a study or unallocated stock
    - if none need it, unallocated stock
-4. Verify the fields against the physical kit and save.
+4. Verify the fields against the physical kit and save. Fields the reader could
+   not settle are listed under "Please check".
 5. The app stores the action locally first and marks it as pending if it cannot
    reach the server.
-6. The server accepts a kit type of one or two letters, a valid ISO expiry, a
-   non-expired kit and a known protocol. Duplicate serials are rejected. Lot is
-   optional. Each serial is one kit.
+6. The server accepts a kit type of letters or digits (such as `J` or `HLA`), a
+   valid ISO expiry, a non-expired kit and a known study. Duplicate serials are
+   rejected. Lot is optional. Each serial is one kit.
 
 ## Allocation workflow
 
-The Sheet lists an allocation control for every in-stock kit. A kit can move to
-any protocol or back to unallocated stock. Each move is an audited event.
-Allocating to a protocol with no visit for that kit type is allowed.
+The Sheet has an allocation control for every in-stock kit, and a study page lists
+unallocated kits that study needs. A kit can move to any study or back to
+unallocated stock. Each move is an audited event. Allocating to a study with no
+visit for that kit type is allowed.
 
 ## Use workflow
 
 1. Select **Use** and read or type the serial.
-2. Enter participant initials.
-3. Select the protocol and visit. The kit's protocol is preselected, with the
-   visits that need this kit first.
-4. If the visit is not planned for that kit, select **Other** or an unplanned
+2. Choose the study, participant and visit. The kit's study is preselected, with
+   the visits that need this kit first.
+3. If the visit is not planned for that kit, select **Other** or an unplanned
    visit and provide a reason.
-5. Record the use.
+4. Record the use.
 
-Only an in-stock, non-expired, allocated kit can be used. Using an unallocated
-kit, or choosing another protocol, moves the kit there first. A successful use
-records the participant and visit and changes the status to `used`.
+Only an in-stock, non-expired, allocated kit can be used, for a participant in its
+study. Using an unallocated kit, or choosing another study, moves the kit there
+first. A successful use records the participant and visit and changes the status
+to `used`.
 
 ## Alert workflow
 
@@ -66,22 +71,21 @@ still waiting to send, so they also work offline.
   already expired.
 - **Low stock, all stock:** usable kits of a type at or below `low_stock_total`
   (default 5).
-- **Low stock, per protocol:** usable kits of a type allocated to a protocol at
-  or below `low_stock_protocol` (default 5).
+- **Low stock, per study:** usable kits of a type allocated to a study at or
+  below `low_stock_study` (default 5).
 
-A kit type can have its own quantity for all stock or for one protocol. A scope
-is checked only once it has held stock of that type.
+A kit type can have its own quantity for all stock or for one study. A scope is
+checked only once it has held stock of that type.
 
 The pop-up opens when the app opens, after a use or removal, and after receiving
 a kit that is close to expiry. Acknowledging records an audited event and hides
 the alert for that person until the next day. An alert for a lower count is a
 new alert.
 
-## Admin workflow
+## Studies and settings changes
 
-The Admin tab changes alert settings and adds studies, protocols and visits. It
-needs a connection, because the changes apply to everyone. Any signed-in user can
-make these changes for now. Each one is an audited event.
+These need a connection, because they apply to everyone. Any signed-in user can
+make them for now. Each one is an audited event.
 
 ## Remove workflow
 
@@ -96,11 +100,11 @@ stock record and audit event.
 ## Sign-off workflow
 
 1. Select **Sign off**.
-2. Enter participant initials and visit.
+2. Choose the study, participant and visit.
 3. Submit the sign-off.
 
-The server records the event in the immutable audit log. Sign-off does not
-change kit stock.
+The sign-off is recorded on the participant and in the audit log. A visit can be
+signed off once per participant. Sign-off does not change kit stock.
 
 ## Offline and synchronization workflow
 
@@ -136,7 +140,8 @@ change kit stock.
 
 ### Bundled browser assets
 
-- Tesseract.js
+- Tesseract.js (text)
+- zxing-wasm (barcodes)
 - English Tesseract trained data
 - Service worker support for offline shell caching
 
@@ -152,8 +157,8 @@ change kit stock.
 - Set a strong persistent `KIT_SECRET`.
 - Set a durable `KIT_DB` or migrate to a managed relational database for
   multi-instance hosting.
-- Replace the dummy studies, protocols and visits with the signed protocols.
-- Replace the seed users, and decide who may use the Admin tab.
+- Replace the dummy studies, visits and participants with the signed protocols.
+- Replace the seed users, and decide who may change studies and settings.
 - Configure HTTPS, backups, logging, and access controls.
 - Complete device OCR testing and required privacy/compliance agreements before
   real participant data is used.

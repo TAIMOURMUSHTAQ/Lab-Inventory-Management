@@ -5,18 +5,18 @@
 The app must use a protocol master, not assumptions:
 
 ```text
-read serial -> identify kit -> select protocol and participant visit
+read serial -> identify kit -> select study, participant and visit
             -> check the visit needs this kit type
             -> mark the kit used (a visit not planned needs a reason)
 ```
 
 Each serial is one kit. The final configuration must include, for every study:
 
-| Study | Protocol | Visit | Schedule day | Kit types needed |
-|---|---|---|---:|---|
-| supplied by client | supplied by client | Visit 1 | 1 | J |
+| Study ID on the label | Visit | Schedule day | Kit types needed |
+|---|---|---:|---|
+| supplied by client | Visit 1 | 1 | J |
 
-The studies, protocols and visits in the app today are dummy data.
+The studies, visits and participants in the app today are dummy data.
 
 ## Scenario coverage
 
@@ -32,7 +32,7 @@ rule:
 7. Visit is valid; the kit becomes `used` and stock falls by one.
 8. Kit is unallocated; choosing a protocol at use allocates it first.
 9. Stock reaches the low stock quantity; the alert appears overall and per
-   protocol.
+   study.
 10. A later scan of a used kit is rejected.
 11. Visit has no configured quantity; use is blocked.
 12. Unplanned visit is entered with a required reason.
@@ -42,7 +42,7 @@ rule:
 16. Device goes offline; action is saved locally and later synchronized.
 17. Synchronization conflicts with another user; the server result is shown in
     Needs attention.
-18. CSV contains kit type, expiry, study, protocol, status, and usage.
+18. CSV contains kit type, expiry, study, status, and usage.
 19. User signs off a visit; the sign-off appears in audit without changing
     inventory.
 20. Session expires; the user must sign in again before synchronization.

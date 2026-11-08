@@ -28,28 +28,31 @@ SQLite staging database from disappearing on restart.
 
 - **Sign in:** each person has their own login. The session lasts one 8-hour
   shift, and the server logs out after 30 minutes idle.
-- **Receive:** take a photo of the label or upload an image. The same reader
-  handles both and fills the serial, kit type and expiry, plus the lot when it
-  is readable. Each serial is one kit. The serial is the reference for
-  everything else. Check the fields against the kit, then save.
-- **Allocate:** a received kit goes to a protocol or to unallocated stock. The
-  app suggests the protocol printed on the label, or the only protocol that
-  needs that kit type. If several need it, the person chooses. If none do, it
-  goes to unallocated stock. The Sheet can move a kit at any time.
-- **Use:** read the kit, enter participant initials, and select the visit. The
-  visits come from the kit's protocol. Using an unallocated kit allocates it. A
-  visit not planned for that kit needs a reason.
+- **Receive:** tap **Take photo** to use the phone camera, or **Upload image**.
+  Both read the same still photo and fill the serial, kit type and expiry, plus
+  the lot when readable. The lot is optional. Each serial is one kit, and the
+  serial is the reference for everything else. Check the fields, then save.
+- **Allocate:** a received kit goes to a study or to unallocated stock. The app
+  suggests the study ID printed on the label, or the only study that needs that
+  kit type. If several need it, the person chooses. If none do, it goes to
+  unallocated stock. Move a kit from the Sheet or from the study page.
+- **Use:** read the kit, then choose the study, participant and visit. The kit's
+  study is filled in. Using an unallocated kit allocates it. A visit not planned
+  for that kit needs a reason.
 - **Remove:** a reason is required (expired, damaged, recall, other).
 - **Sign off:** records that a visit was signed off.
+- **Studies:** one card per study. Opening a card shows that study's details,
+  visit schedule with the kits each visit needs, participants, and inventory on
+  one page, and everything about the study is added or changed there. A protocol
+  is not a separate record: the study holds its schedule, as in CRISP.
 - **Sheet:** usable stock by kit type (quantity, next expiry, allocation), then
-  all kits on the device with pending items marked. Filter by protocol or
+  all kits on the device with pending items marked. Filter by study or
   unallocated. Download as Excel (CSV), also works offline.
-- **Alerts:** a pop-up lists kits expiring within the set number of days and
-  kit types at or below the low stock quantity, overall and per protocol. See
-  below.
-- **Admin:** set the alert days and quantities, set a different low stock
-  quantity for one kit type, and add studies, protocols and visits. Anyone
-  signed in can change these for now. Every change is in the audit trail.
+- **Settings:** the alert days and quantities, and a different low stock quantity
+  for one kit type. Anyone signed in can change studies and settings for now.
+  Every change is in the audit trail.
+- **Alerts:** a pop-up lists kits expiring within the set number of days and kit
+  types at or below the low stock quantity, overall and per study. See below.
 - **Audit:** every action, who did it, when (server time), and the result.
   Events are never edited or deleted.
 - **Needs attention:** actions the server refused, with the reason.
@@ -71,41 +74,63 @@ SQLite staging database from disappearing on restart.
   until the kit is used, removed or restocked. A lower count alerts again the
   same day. The red alert count at the top reopens the full list at any time.
 - Expired kits do not count as stock.
-- A kit type is only checked where it has held stock, so a protocol that has
-  never been given a kit type does not alert.
+- A kit type is only checked where it has held stock, so a study that has never
+  been given a kit type does not alert.
 - Alerts appear inside the app only. There is no email or phone notification
   while the app is closed.
 
 ## Label reading
 
-- Reads kit type, expiry, serial and lot from a still photo. The reader runs
-  several rotated, enlarged, contrast-stretched passes and stops once it has the
-  serial, kit type and expiry. A barcode fills the serial only where OCR misses
-  it and the browser can read barcodes (iPhone Safari cannot).
-- Tested on the 10 sample boxes (see below). Always check every field against
-  the box before saving.
+The reader takes one still photo and runs on the device, so it works offline.
+
+- **Serial:** from the barcode, using a bundled decoder that also works on iPhone
+  Safari. A label can carry a barcode that is not the serial (Syneos labels do),
+  so the printed number is compared. If they disagree, the app asks for a check.
+  PPD serials are `39`, a letter `O`, then 8 digits.
+- **Tilt and direction:** the photo is straightened by up to 20 degrees and turned
+  using the barcode's direction.
+- **Small print:** the lot and expiry line and the kit line are cropped from the
+  full-size photo, enlarged and read several times.
+- **Choosing a value:** every read is a vote. If the reads disagree on a date, even
+  with one that is impossible, the app shows "Please check" instead of guessing.
+- A blank field is not a failure: an expiry that is blacked out or handwritten is
+  left blank and flagged. Always check every field against the kit before saving.
+
+## Updates on phones
+
+App files come from the network first, so a new release takes over by itself the
+next time the app is opened online, and the page reloads once. The version shows
+next to the signed-in email. Change `APP_VERSION` in `static/app.js` and `CACHE`
+in `static/sw.js` together for each release that changes the large reader files.
 
 ## Tests
 
     python3 -m unittest discover tests
 
-## Test results (local, headless Chromium)
+## Test results (local, headless Chrome, simulated iPhone browser)
 
-- Sign in, receive, use while offline, reload while offline, sync when back
-  online, refused duplicate, CSV export, audit page: all passed.
-- Reader on the 10 sample photos (run through a simulated camera):
-  - Fully correct: boxes A, D, F.
-  - Some fields missed and flagged for the lab: B, C, E, I, J.
-  - Wrong but not flagged (the lab must catch these): G (lot character), H (lot
-    digits and expiry year 2028 instead of 2026).
-  - Phone speed not measured yet. Expect slower than this machine.
+Scored against the 12 sample images, with serials confirmed from their barcodes:
+
+| Field | Before | Now |
+|---|---:|---:|
+| Serial | 4 | 12 |
+| Kit type | 9 | 12 |
+| Expiry | 8 | 11 |
+| Lot (10 labels print one) | 3 | 9 |
+
+- The expiry miss is the label with the printed date blacked out and handwritten
+  over. It is left blank and flagged.
+- On 20 tilted, turned and blurred copies, serial and kit type were 20 of 20 and
+  expiry 18 of 20. Both wrong dates showed "Please check".
+- The sample photos are small (768 by 1024). Speed and accuracy on a real iPhone
+  camera photo are not measured yet.
 
 ## Not done yet (before real use)
 
 - Hosting on Render/GitHub, HTTPS, and a database that suits the hosting plan.
 - Two-factor sign-in, and real password reset.
-- Real studies, protocols and visit schedules (the current ones are dummy data).
-- Editing or deleting studies, protocols and visits (Admin can only add them).
+- Real studies, visit schedules and participants (the current ones are dummy data).
 - Vendor shipment list check, if the client provides one.
-- Reader speed and accuracy on an iPhone 12 with real boxes.
+- Reader speed and accuracy on an iPhone with real boxes.
+- A trained OCR service, if the on-device reader is not accurate enough.
 - HIPAA agreement with the host before any real participant data.

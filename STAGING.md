@@ -27,7 +27,7 @@ with disposable fixtures, never for inventory records.
 4. Deploy the service.
 5. Open the generated `https://...onrender.com` address in Safari.
 6. Confirm the login page, take photo, upload image, OCR autofill, receive,
-   allocation, use, removal, sign-off, alerts, admin, sheet, CSV, and audit
+   allocation, use, removal, sign-off, alerts, studies, settings, sheet, CSV, and audit
    workflows.
 7. Run `python3 server.py seed` only against a controlled staging database if
    demo logins are required. Store the generated passwords in a secure channel.
@@ -39,31 +39,34 @@ with disposable fixtures, never for inventory records.
 - [ ] Upload image picks from the photo library
 - [ ] A full-size iPhone photo is read without the page failing, and the time is recorded
 - [ ] The deployed URL is opened on the phone itself, not only in a Mac tab
-- [ ] OCR is tested with the label rotated 0, 90, and 270 degrees
+- [ ] The version next to the email matches this release
+- [ ] OCR is tested with the label rotated 0, 90, and 270 degrees, and slightly tilted
 - [ ] OCR is tested with expiry adjacent to lot text
 - [ ] OCR result is reviewed before saving
 - [ ] OCR fills serial, kit type, and expiry, including kits I, J, and K
 - [ ] User can correct a field before saving
 - [ ] Duplicate serial is rejected
-- [ ] A kit needed by one protocol is suggested for that protocol
-- [ ] A kit needed by several protocols asks the person to choose
+- [ ] A kit needed by one study is suggested for that study
+- [ ] A kit needed by several studies asks the person to choose
 - [ ] A kit needed by none goes to unallocated stock and can be allocated later
 - [ ] The expiry alert appears at the set number of days
-- [ ] The low stock alert appears overall and per protocol at the set quantity
+- [ ] The low stock alert appears overall and per study at the set quantity
 - [ ] An acknowledged alert stays hidden that day and returns the next day
-- [ ] Admin changes to alert settings take effect and appear in the audit
+- [ ] Settings changes take effect and appear in the audit
+- [ ] A study card opens one page with its schedule, participants, and inventory
+- [ ] Use and sign-off list only that study's participants
 - [ ] Further use is rejected
 - [ ] Offline receive/use queue resends after reconnection
-- [ ] CSV includes kit type, expiry, study, and protocol
+- [ ] CSV includes kit type, expiry, and study
 - [ ] Audit displays accepted and rejected events
 - [ ] Restart does not lose staging data
 - [ ] No real participant data is used in staging
 
 ## Before production
 
-- Replace the dummy studies, protocols and visits with the signed schedules
+- Replace the dummy studies, visits and participants with the signed schedules
   before accepting a real transaction.
-- Decide who may use the Admin tab.
+- Decide who may change studies and settings.
 - Replace demo accounts with managed user accounts and password reset.
 - Confirm backup/restore for the database.
 - Review retention, access, and privacy requirements.

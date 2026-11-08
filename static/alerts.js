@@ -13,11 +13,11 @@
     return box.status === "in_stock" && !(box.expiry && box.expiry < today);
   }
 
-  function lowStockLimit(config, kitType, protocolId) {
+  function lowStockLimit(config, kitType, studyId) {
     const override = (config.overrides || []).find((o) =>
-      o.kit_type === kitType && o.protocol_id === (protocolId || 0));
+      o.kit_type === kitType && o.study_id === (studyId || 0));
     if (override) return override.threshold;
-    return protocolId ? config.settings.low_stock_protocol : config.settings.low_stock_total;
+    return studyId ? config.settings.low_stock_study : config.settings.low_stock_total;
   }
 
   function expiryAlerts(boxes, config, today, codeOf) {
@@ -31,11 +31,11 @@
           : days === 0 ? "expires today"
           : `expires ${b.expiry} (in ${days} day${days === 1 ? "" : "s"})`;
         return { key: `expiry:${b.serial}`, kind: days < 0 ? "expired" : "expiring", serial: b.serial,
-                 text: `Kit ${b.kit_type}, serial ${b.serial} ${when}. ${codeOf(b.protocol_id)}.` };
+                 text: `Kit ${b.kit_type}, serial ${b.serial} ${when}. ${codeOf(b.study_id)}.` };
       });
   }
 
-  // Only scopes that have held stock are checked, so a protocol that has never
+  // Only scopes that have held stock are checked, so a study that has never
   // been given a kit type does not alert. Running out afterwards still alerts.
   function lowStockAlerts(boxes, config, today, codeOf) {
     const out = [];
@@ -48,16 +48,16 @@
         out.push({ key: `low:all:${kit}:${ofType.length}`, kind: "low", count: ofType.length,
                    text: `Kit ${kit}: ${ofType.length} left in total (alert at ${limit}).` });
       }
-      const protocolIds = [...new Set(boxes.filter((b) => b.kit_type === kit && b.protocol_id)
-        .map((b) => b.protocol_id))];
-      const spare = ofType.filter((b) => !b.protocol_id).length;
-      protocolIds.forEach((id) => {
-        const count = ofType.filter((b) => b.protocol_id === id).length;
-        const protocolLimit = lowStockLimit(config, kit, id);
-        if (count <= protocolLimit) {
+      const studyIds = [...new Set(boxes.filter((b) => b.kit_type === kit && b.study_id)
+        .map((b) => b.study_id))];
+      const spare = ofType.filter((b) => !b.study_id).length;
+      studyIds.forEach((id) => {
+        const count = ofType.filter((b) => b.study_id === id).length;
+        const studyLimit = lowStockLimit(config, kit, id);
+        if (count <= studyLimit) {
           const note = spare ? ` ${spare} unallocated available.` : "";
           out.push({ key: `low:${id}:${kit}:${count}`, kind: "low", count,
-                     text: `Kit ${kit} for ${codeOf(id)}: ${count} left (alert at ${protocolLimit}).${note}` });
+                     text: `Kit ${kit} for ${codeOf(id)}: ${count} left (alert at ${studyLimit}).${note}` });
         }
       });
     });
@@ -67,7 +67,7 @@
   function computeAlerts(boxes, config, today) {
     if (!config || !config.settings || config.settings.expiry_days === undefined) return [];
     const codes = {};
-    (config.studies || []).forEach((s) => s.protocols.forEach((p) => { codes[p.id] = p.code; }));
+    (config.studies || []).forEach((s) => { codes[s.id] = s.code; });
     const codeOf = (id) => codes[id] || "Unallocated";
     return [...expiryAlerts(boxes, config, today, codeOf), ...lowStockAlerts(boxes, config, today, codeOf)];
   }

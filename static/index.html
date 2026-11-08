@@ -36,7 +36,7 @@ label{display:block;font-size:14px;color:var(--muted);margin-bottom:10px}
 input,select{display:block;width:100%;margin-top:4px;min-height:48px;font:inherit;font-size:17px;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .stack{display:flex;flex-direction:column;gap:2px}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}
-@media (max-width:520px){.row2{grid-template-columns:1fr}}
+@media (max-width:520px){.row2{grid-template-columns:1fr}.tabs{flex-wrap:nowrap;gap:4px}.tabs button{flex:1 1 0;min-width:0;padding:8px 2px;font-size:14px}}
 .msg{border-radius:10px;padding:10px 12px;margin:8px 0}
 .msg.ok{background:var(--okbg);color:var(--ok)} .msg.err{background:var(--errbg);color:var(--err)}
 .warnbox{background:var(--warnbg);border-color:transparent}
@@ -63,6 +63,17 @@ dialog.alerts::backdrop{background:rgba(0,0,0,.5)}
 .actions button{flex:1}
 .schedule{margin:6px 0 12px;padding-left:18px;font-size:14px}
 .schedule li{margin:2px 0}
+.preview{display:block;max-width:100%;max-height:240px;border-radius:10px;margin:10px auto 4px}
+.study-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin:10px 0}
+.scard{display:flex;flex-direction:column;gap:4px;text-align:left;padding:14px;border-radius:12px;width:100%}
+.scard:hover{border-color:var(--primary)}
+.srow{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.smx{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px;font-size:12px;color:var(--muted)}
+.smx span{display:flex;flex-direction:column}
+.smx b{font-size:20px;color:var(--ink)}
+details{margin-top:10px}
+summary{cursor:pointer;color:var(--primary);font-weight:600;min-height:32px}
+details form{margin-top:8px}
 td select{min-height:36px;width:auto;margin:0;padding:4px 8px;font-size:14px}
 h3{font-size:15px;margin:12px 0 2px}
 </style>
@@ -72,6 +83,7 @@ h3{font-size:15px;margin:12px 0 2px}
 <dialog id="alertDialog" class="alerts"></dialog>
 <script src="/label.js"></script>
 <script src="/alerts.js"></script>
+<script src="/reader.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>
