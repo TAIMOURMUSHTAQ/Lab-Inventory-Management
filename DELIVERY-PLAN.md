@@ -5,39 +5,35 @@
 The app must use a protocol master, not assumptions:
 
 ```text
-scan serial -> identify box -> select participant visit
-            -> find kit type + visit protocol quantity
-            -> deduct that many units
-            -> block if no rule exists
+read serial -> identify kit -> select protocol and participant visit
+            -> check the visit needs this kit type
+            -> mark the kit used (a visit not planned needs a reason)
 ```
 
-The final configuration must include, for every allowed combination:
+Each serial is one kit. The final configuration must include, for every study:
 
-| Kit type | Visit/protocol | Units inside box at receipt | Units deducted |
-|---|---|---:|---:|
-| I | Day 28 | supplied by client | supplied by client |
+| Study | Protocol | Visit | Schedule day | Kit types needed |
+|---|---|---|---:|---|
+| supplied by client | supplied by client | Visit 1 | 1 | J |
 
-If different protocol names share a visit, the protocol identifier must also be
-included in the key. The application should reject duplicate or missing rules.
-It must never silently use `1`.
+The studies, protocols and visits in the app today are dummy data.
 
 ## Scenario coverage
 
 The staging test set should cover each of these for every kit type and visit
 rule:
 
-1. New box received with a valid serial, label, lot, expiry, and starting
-   quantity.
-2. Barcode read automatically; OCR reads the label fields.
-3. Barcode succeeds but OCR misses one field; the field is flagged for review.
-4. OCR produces a suspicious lot or date; the user must confirm/correct it.
+1. New kit received with a valid serial, label, and expiry.
+2. A photo or uploaded image fills the label fields.
+3. OCR misses one field; the field is flagged for review.
+4. OCR produces a suspicious date; the user must confirm/correct it.
 5. Serial already exists; receipt is rejected.
 6. Box is expired; receipt is rejected.
-7. Visit is valid and quantity is deducted automatically.
-8. Visit is valid but remaining quantity is lower than the protocol quantity;
-   use is rejected without changing inventory.
-9. Remaining quantity reaches zero; the box becomes `used`.
-10. A later scan of a depleted box is rejected.
+7. Visit is valid; the kit becomes `used` and stock falls by one.
+8. Kit is unallocated; choosing a protocol at use allocates it first.
+9. Stock reaches the low stock quantity; the alert appears overall and per
+   protocol.
+10. A later scan of a used kit is rejected.
 11. Visit has no configured quantity; use is blocked.
 12. Unplanned visit is entered with a required reason.
 13. Damaged, recalled, or expired box is removed once.
@@ -46,7 +42,7 @@ rule:
 16. Device goes offline; action is saved locally and later synchronized.
 17. Synchronization conflicts with another user; the server result is shown in
     Needs attention.
-18. CSV contains total quantity, remaining quantity, status, and audit details.
+18. CSV contains kit type, expiry, study, protocol, status, and usage.
 19. User signs off a visit; the sign-off appears in audit without changing
     inventory.
 20. Session expires; the user must sign in again before synchronization.
@@ -135,15 +131,13 @@ participant data. For each fixture, record the expected:
 - lot
 - expiry
 - visit
-- starting quantity
-- deduction quantity
 
 The fixture is not complete until the client confirms the expected values.
 
 ## Step 5: staging acceptance
 
 Run the complete scenario list above on a real iPhone over HTTPS. Record the
-expected and actual remaining quantities after every scan. Test:
+expected and actual stock by kit type after every scan. Test:
 
 - Safari reload
 - camera permission

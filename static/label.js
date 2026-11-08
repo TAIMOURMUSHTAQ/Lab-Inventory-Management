@@ -33,10 +33,11 @@
     const serials = compact.match(/\b\d{8,14}\b/g) || [];
     if (serials.length) out.serial = serials[serials.length - 1];
 
-    const kit = /\bKit\s*Type\s*([A-J])\b/i.exec(compact) ||
-      /\bK\w{0,3}\s*Type\s*([A-J])\b/i.exec(compact) ||
-      /\bType\s*([A-J])\b/i.exec(compact);
-    if (kit) out.kit_type = kit[1].toUpperCase();
+    const kit = /\bKit\s*Type\s*([A-Z])\b/i.exec(compact) ||
+      /\bK\w{0,3}\s*Type\s*([A-Z])\b/i.exec(compact) ||
+      /\bType\s*([A-Z])\b/i.exec(compact);
+    // OCR often reads a capital I as a lowercase l.
+    if (kit) out.kit_type = kit[1] === "l" ? "I" : kit[1].toUpperCase();
     else out.problems.push("Kit type not found");
 
     const proto = /TAK\s*[-–—]?\s*\d{3}\s*[-–—]\s*\d{4}/i.exec(compact);
@@ -71,7 +72,6 @@
   function checkFields(f, today) {
     const issues = [];
     if (!f.kit_type) issues.push("kit type");
-    if (!f.lot) issues.push("lot");
     if (!f.expiry) issues.push("expiry");
     if (f.expiry && today && f.expiry < today) issues.push("expiry is in the past");
     return issues;

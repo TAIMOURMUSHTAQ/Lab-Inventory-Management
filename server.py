@@ -10,6 +10,7 @@ Run:   python3 server.py seed    (creates the test users, prints their passwords
 import csv
 import io
 import os
+import re
 import secrets
 import sqlite3
 import sys
@@ -28,15 +29,32 @@ app.secret_key = os.environ.get("KIT_SECRET") or secrets.token_hex(32)
 app.permanent_session_lifetime = timedelta(hours=SESSION_HOURS)
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
 
-# Demo protocol: each kit type and the visits it is used for. Replace with the
-# signed protocol later. Quantities default to one until the signed protocol
-# supplies a different deduction for a kit type and visit.
-PROTOCOL = {
-    "A": ["SCR"], "B": ["SCR", "Unscheduled"], "C": ["Day -2"],
-    "D": ["Day -2", "Day -1"], "E": ["Day 1"], "F": ["Day 1 At Discharge"],
-    "G": ["Day 14"], "H": ["Day 27"], "I": ["Day 28"], "J": ["Day 35, Early Term"],
+# Dummy studies: (study, [(protocol code, protocol name, [(visit, day, kit types)])]).
+# Loaded once into an empty database. Replace with the signed protocols later.
+DEMO_STUDIES = [
+    ("TAK-360 Demo Study", [
+        ("TAK-360-2002", "TAK-360 Phase 2 (dummy schedule)", [
+            ("SCR", -28, "A,B"), ("Unscheduled", None, "B"), ("Day -2", -2, "C,D"),
+            ("Day -1", -1, "D"), ("Day 1", 1, "E"), ("Day 1 At Discharge", 1, "F"),
+            ("Day 14", 14, "G"), ("Day 27", 27, "H"), ("Day 28", 28, "I"),
+            ("Day 35, Early Term", 35, "J"),
+        ]),
+    ]),
+    ("Demo Study 2", [
+        ("PROTO-A", "Protocol A (dummy)", [
+            ("Visit 1", 1, "J"), ("Visit 2", 14, "K"), ("Visit 3", 28, "J,L"),
+        ]),
+        ("PROTO-B", "Protocol B (dummy)", [
+            ("Visit 1", 1, "M"), ("Visit 2", 14, "J"), ("Visit 3", 28, "N"),
+        ]),
+    ]),
+]
+DEFAULT_SETTINGS = {
+    "expiry_days": 30,         # alert this many days before a kit expires
+    "low_stock_total": 5,      # alert at this many usable kits of a type, all stock
+    "low_stock_protocol": 5,   # alert at this many usable kits of a type in a protocol
 }
-PROTOCOL_QUANTITIES = {kit: {visit: 1 for visit in visits} for kit, visits in PROTOCOL.items()}
+KIT_TYPE = re.compile(r"^[A-Z]{1,2}$")
 
 
 def now_utc():
@@ -63,7 +81,7 @@ def close_db(_exc):
 
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS users (
@@ -101,13 +119,61 @@ def init_db():
             result TEXT NOT NULL,           -- accepted | rejected
             message TEXT
         );
+        CREATE TABLE IF NOT EXISTS studies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL COLLATE NOCASE
+        );
+        CREATE TABLE IF NOT EXISTS protocols (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            study_id INTEGER NOT NULL REFERENCES studies(id),
+            code TEXT UNIQUE NOT NULL COLLATE NOCASE,
+            name TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS visits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            protocol_id INTEGER NOT NULL REFERENCES protocols(id),
+            name TEXT NOT NULL COLLATE NOCASE,
+            day INTEGER,                    -- schedule day; empty for unscheduled visits
+            kit_types TEXT NOT NULL,        -- comma separated, e.g. "J,L"
+            UNIQUE (protocol_id, name)
+        );
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS low_stock_overrides (
+            kit_type TEXT NOT NULL,
+            protocol_id INTEGER NOT NULL DEFAULT 0,  -- 0 means all stock of the type
+            threshold INTEGER NOT NULL,
+            PRIMARY KEY (kit_type, protocol_id)
+        );
+        CREATE TABLE IF NOT EXISTS alert_acks (
+            user_id TEXT NOT NULL,
+            alert_key TEXT NOT NULL,
+            ack_date TEXT NOT NULL,         -- hidden for this user on this date only
+            PRIMARY KEY (user_id, alert_key, ack_date)
+        );
         """
     )
+    # Each server worker runs this at start-up, so only one may upgrade at a time.
+    conn.execute("BEGIN IMMEDIATE")
     columns = {row[1] for row in conn.execute("PRAGMA table_info(boxes)")}
     if "quantity" not in columns:
         conn.execute("ALTER TABLE boxes ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1")
     if "remaining_quantity" not in columns:
         conn.execute("ALTER TABLE boxes ADD COLUMN remaining_quantity INTEGER NOT NULL DEFAULT 1")
+    if "protocol_id" not in columns:        # empty means unallocated stock
+        conn.execute("ALTER TABLE boxes ADD COLUMN protocol_id INTEGER REFERENCES protocols(id)")
+    for key, value in DEFAULT_SETTINGS.items():
+        conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value))
+    if not conn.execute("SELECT 1 FROM studies").fetchone():
+        for study, protocols in DEMO_STUDIES:
+            study_id = conn.execute("INSERT INTO studies (name) VALUES (?)", (study,)).lastrowid
+            for code, name, visits in protocols:
+                protocol_id = conn.execute("INSERT INTO protocols (study_id, code, name) VALUES (?, ?, ?)",
+                                           (study_id, code, name)).lastrowid
+                conn.executemany("INSERT INTO visits (protocol_id, name, day, kit_types) VALUES (?, ?, ?, ?)",
+                                 [(protocol_id, v, day, kits) for v, day, kits in visits])
     conn.commit()
     conn.close()
 
@@ -164,11 +230,28 @@ def me():
     user, err = require_user()
     if err:
         return err
-    return jsonify(user=user, protocol=PROTOCOL, protocol_quantities=PROTOCOL_QUANTITIES,
-                   today=date.today().isoformat())
+    return jsonify(user=user, today=date.today().isoformat())
 
 
 # ---------- data for the screens ----------
+
+def config_payload():
+    """Studies, schedules and alert settings the device keeps for offline use."""
+    cur = db()
+    visits = {}
+    for v in cur.execute("SELECT * FROM visits ORDER BY day IS NULL, day, id"):
+        visits.setdefault(v["protocol_id"], []).append(
+            {"id": v["id"], "name": v["name"], "day": v["day"], "kit_types": v["kit_types"].split(",")})
+    protocols = {}
+    for p in cur.execute("SELECT * FROM protocols ORDER BY code"):
+        protocols.setdefault(p["study_id"], []).append(
+            {"id": p["id"], "code": p["code"], "name": p["name"], "visits": visits.get(p["id"], [])})
+    studies = [{"id": s["id"], "name": s["name"], "protocols": protocols.get(s["id"], [])}
+               for s in cur.execute("SELECT * FROM studies ORDER BY name")]
+    settings = {r["key"]: r["value"] for r in cur.execute("SELECT key, value FROM settings")}
+    overrides = [dict(r) for r in cur.execute("SELECT * FROM low_stock_overrides ORDER BY kit_type, protocol_id")]
+    return {"studies": studies, "settings": settings, "overrides": overrides}
+
 
 @app.get("/api/state")
 def state():
@@ -177,8 +260,12 @@ def state():
     if err:
         return err
     rows = db().execute("SELECT * FROM boxes ORDER BY received_at DESC").fetchall()
-    return jsonify(boxes=[dict(r) for r in rows], protocol=PROTOCOL,
-                   protocol_quantities=PROTOCOL_QUANTITIES,
+    # A few days back, because the device and the server can be on different dates.
+    since = (date.today() - timedelta(days=3)).isoformat()
+    acks = db().execute("SELECT alert_key, ack_date FROM alert_acks WHERE user_id = ? AND ack_date >= ?",
+                        (user["id"], since)).fetchall()
+    return jsonify(boxes=[dict(r) for r in rows], config=config_payload(),
+                   acks=[dict(a) for a in acks],
                    today=date.today().isoformat(), server_time=iso_now())
 
 
@@ -201,21 +288,121 @@ def export_csv():
     user, err = require_user()
     if err:
         return err
-    rows = db().execute("SELECT * FROM boxes ORDER BY received_at").fetchall()
+    rows = db().execute(
+        """SELECT b.*, p.code AS protocol, s.name AS study FROM boxes b
+           LEFT JOIN protocols p ON p.id = b.protocol_id
+           LEFT JOIN studies s ON s.id = p.study_id
+           ORDER BY b.received_at"""
+    ).fetchall()
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["Kit serial", "Kit type", "Product", "Lot", "Expiry", "Quantity",
-                "Remaining", "Status", "Used for", "Received by", "Received at", "Last updated"])
+    w.writerow(["Kit serial", "Kit type", "Expiry", "Study", "Protocol", "Lot", "Product",
+                "Status", "Used for", "Received by", "Received at", "Last updated"])
     for r in rows:
-        w.writerow([r["serial"], r["kit_type"], r["product"], r["lot"], r["expiry"],
-                    r["quantity"], r["remaining_quantity"], r["status"], r["used_for"],
-                    r["received_by"], r["received_at"], r["updated_at"]])
+        w.writerow([r["serial"], r["kit_type"], r["expiry"], r["study"] or "",
+                    r["protocol"] or "Unallocated", r["lot"], r["product"], r["status"],
+                    r["used_for"], r["received_by"], r["received_at"], r["updated_at"]])
     name = f"lab-kits-{date.today().isoformat()}.csv"
     return Response(buf.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
 # ---------- sync: the one place data changes ----------
+
+def find_protocol(value):
+    """Returns (protocol row or None, error). An empty value means unallocated."""
+    if value in (None, ""):
+        return None, None
+    row = db().execute("SELECT * FROM protocols WHERE id = ?", (str(value),)).fetchone()
+    return (row, None) if row else (None, "That protocol does not exist")
+
+
+def whole_number(value):
+    """Returns a non-negative whole number, or None if the value is not one."""
+    text = str(value).strip()
+    return int(text) if text.isdigit() and len(text) <= 6 else None
+
+
+def apply_admin_event(ev):
+    """Settings and study set-up. Returns (ok, message), or None for other actions."""
+    action = ev.get("action")
+    cur = db()
+
+    if action == "set_settings":
+        values = ev.get("settings")
+        if not isinstance(values, dict) or not values or set(values) - set(DEFAULT_SETTINGS):
+            return False, "Unknown settings"
+        numbers = {key: whole_number(value) for key, value in values.items()}
+        if None in numbers.values():
+            return False, "Alert settings must be whole numbers"
+        for key, value in numbers.items():
+            cur.execute("UPDATE settings SET value = ? WHERE key = ?", (value, key))
+        summary = ", ".join(f"{key}={value}" for key, value in numbers.items())
+        return True, f"Alert settings changed: {summary}"
+
+    if action == "set_override":
+        kit_type = str(ev.get("kit_type") or "").strip().upper()
+        if not KIT_TYPE.match(kit_type):
+            return False, "Kit type must be a letter, such as J"
+        protocol, error = find_protocol(ev.get("protocol_id"))
+        if error:
+            return False, error
+        scope = protocol["code"] if protocol else "all stock"
+        protocol_id = protocol["id"] if protocol else 0
+        if str(ev.get("threshold") if ev.get("threshold") is not None else "").strip() == "":
+            cur.execute("DELETE FROM low_stock_overrides WHERE kit_type = ? AND protocol_id = ?",
+                        (kit_type, protocol_id))
+            return True, f"Removed the low stock override for Kit {kit_type}, {scope}"
+        threshold = whole_number(ev.get("threshold"))
+        if threshold is None:
+            return False, "The alert quantity must be a whole number"
+        cur.execute("INSERT OR REPLACE INTO low_stock_overrides (kit_type, protocol_id, threshold) VALUES (?, ?, ?)",
+                    (kit_type, protocol_id, threshold))
+        return True, f"Kit {kit_type}, {scope}: alert at {threshold} left"
+
+    if action == "add_study":
+        name = str(ev.get("name") or "").strip()
+        if not name:
+            return False, "Enter the study name"
+        if cur.execute("SELECT 1 FROM studies WHERE name = ?", (name,)).fetchone():
+            return False, f"Study {name} already exists"
+        cur.execute("INSERT INTO studies (name) VALUES (?)", (name,))
+        return True, f"Added study {name}"
+
+    if action == "add_protocol":
+        code = str(ev.get("code") or "").strip()
+        name = str(ev.get("name") or "").strip() or code
+        if not code:
+            return False, "Enter the protocol code"
+        if not cur.execute("SELECT 1 FROM studies WHERE id = ?", (str(ev.get("study_id")),)).fetchone():
+            return False, "That study does not exist"
+        if cur.execute("SELECT 1 FROM protocols WHERE code = ?", (code,)).fetchone():
+            return False, f"Protocol {code} already exists"
+        cur.execute("INSERT INTO protocols (study_id, code, name) VALUES (?, ?, ?)",
+                    (str(ev.get("study_id")), code, name))
+        return True, f"Added protocol {code}"
+
+    if action == "add_visit":
+        protocol, error = find_protocol(ev.get("protocol_id"))
+        if error or not protocol:
+            return False, error or "Choose the protocol"
+        name = str(ev.get("name") or "").strip()
+        if not name:
+            return False, "Enter the visit name"
+        raw_day = str(ev.get("day") if ev.get("day") is not None else "").strip()
+        if raw_day and not re.match(r"^-?\d{1,5}$", raw_day):
+            return False, "The visit day must be a whole number, such as 14 or -2"
+        kits = [k.upper() for k in re.split(r"[\s,]+", str(ev.get("kit_types") or "")) if k]
+        if not kits or not all(KIT_TYPE.match(k) for k in kits):
+            return False, "List the kit types this visit needs, such as J, K"
+        if cur.execute("SELECT 1 FROM visits WHERE protocol_id = ? AND name = ?", (protocol["id"], name)).fetchone():
+            return False, f"{protocol['code']} already has a visit called {name}"
+        cur.execute("INSERT INTO visits (protocol_id, name, day, kit_types) VALUES (?, ?, ?, ?)",
+                    (protocol["id"], name, int(raw_day) if raw_day else None, ",".join(dict.fromkeys(kits))))
+        return True, f"Added {name} to {protocol['code']}"
+
+    return None
+
 
 def apply_event(ev, user):
     """Check one event against the rules and apply it. Returns (ok, message)."""
@@ -230,11 +417,12 @@ def apply_event(ev, user):
         if cur.execute("SELECT 1 FROM boxes WHERE serial = ?", (serial,)).fetchone():
             return False, f"{serial} is already received"
         kit_type = str(ev.get("kit_type") or "").strip().upper()
-        if kit_type not in PROTOCOL:
-            return False, "Kit type must be one of A through J"
+        if not KIT_TYPE.match(kit_type):
+            return False, "Kit type must be a letter, such as J"
         lot = str(ev.get("lot") or "").strip()
-        if not lot:
-            return False, "Lot is required"
+        protocol, error = find_protocol(ev.get("protocol_id"))
+        if error:
+            return False, error
         expiry = str(ev.get("expiry") or "")
         try:
             parsed_expiry = date.fromisoformat(expiry)
@@ -244,21 +432,28 @@ def apply_event(ev, user):
             return False, "Expiry must be a valid date in YYYY-MM-DD format"
         if expiry < today:
             return False, f"{serial} is already expired ({expiry}); record it as removed"
-        try:
-            quantity = int(ev.get("quantity", 1))
-        except (TypeError, ValueError):
-            return False, "Quantity must be a whole number"
-        if quantity < 1:
-            return False, "Quantity must be at least 1"
         cur.execute(
             """INSERT INTO boxes (serial, kit_type, product, lot, expiry, quantity,
-                                  remaining_quantity, status,
+                                  remaining_quantity, status, protocol_id,
                                   received_by, received_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 'in_stock', ?, ?, ?)""",
-            (serial, kit_type, ev.get("product", ""), lot, expiry, quantity, quantity,
+               VALUES (?, ?, ?, ?, ?, 1, 1, 'in_stock', ?, ?, ?, ?)""",
+            (serial, kit_type, ev.get("product", ""), lot, expiry, protocol["id"] if protocol else None,
              user["email"], ev.get("device_time") or iso_now(), iso_now()),
         )
-        return True, f"Received {serial}"
+        return True, f"Received {serial} into {protocol['code'] if protocol else 'unallocated stock'}"
+
+    if action == "allocate":
+        box = cur.execute("SELECT * FROM boxes WHERE serial = ?", (serial,)).fetchone()
+        if not box:
+            return False, f"{serial} is not in stock"
+        if box["status"] != "in_stock":
+            return False, f"{serial} is {box['status']} ({box['used_for'] or 'no visit'})"
+        protocol, error = find_protocol(ev.get("protocol_id"))
+        if error:
+            return False, error
+        cur.execute("UPDATE boxes SET protocol_id = ?, updated_at = ? WHERE serial = ?",
+                    (protocol["id"] if protocol else None, iso_now(), serial))
+        return True, f"{serial} moved to {protocol['code'] if protocol else 'unallocated stock'}"
 
     if action == "use":
         box = cur.execute("SELECT * FROM boxes WHERE serial = ?", (serial,)).fetchone()
@@ -271,27 +466,21 @@ def apply_event(ev, user):
         visit = str(ev.get("visit") or "")
         participant = str(ev.get("participant") or "").strip().upper()
         reason = str(ev.get("reason") or "").strip()
-        allowed = PROTOCOL.get(box["kit_type"], [])
-        try:
-            amount = int(ev.get("amount") or PROTOCOL_QUANTITIES.get(box["kit_type"], {}).get(visit, 1))
-        except (TypeError, ValueError):
-            return False, "Deduction amount must be a whole number"
-        if amount < 1:
-            return False, "Deduction amount must be at least 1"
-        if amount > box["remaining_quantity"]:
-            return False, f"{serial} has only {box['remaining_quantity']} unit(s) remaining"
+        if box["protocol_id"] is None:
+            return False, f"{serial} is unallocated. Allocate it to a protocol first"
+        allowed = [v["name"] for v in cur.execute("SELECT name, kit_types FROM visits WHERE protocol_id = ?",
+                                                  (box["protocol_id"],))
+                   if box["kit_type"] in v["kit_types"].split(",")]
         if visit not in allowed and not reason:
             return False, f"Kit {box['kit_type']} is not planned for {visit}. Give a reason to use it"
         if not participant:
             return False, "Enter the participant initials"
-        remaining = box["remaining_quantity"] - amount
-        status = "used" if remaining == 0 else "in_stock"
         cur.execute(
-            """UPDATE boxes SET status = ?, remaining_quantity = ?, used_for = ?,
+            """UPDATE boxes SET status = 'used', remaining_quantity = 0, used_for = ?,
                                updated_at = ? WHERE serial = ?""",
-            (status, remaining, f"{participant} | {visit} (-{amount})", iso_now(), serial),
+            (f"{participant} | {visit}", iso_now(), serial),
         )
-        return True, f"Used {amount} unit(s) from {serial} for {participant}, {visit}"
+        return True, f"Used {serial} for {participant}, {visit}"
 
     if action == "remove":
         box = cur.execute("SELECT * FROM boxes WHERE serial = ?", (serial,)).fetchone()
@@ -315,6 +504,18 @@ def apply_event(ev, user):
             return False, "Participant and visit are needed to sign off"
         return True, f"Signed off {participant}, {visit}"
 
+    if action == "ack_alert":
+        key = str(ev.get("alert_key") or "").strip()
+        ack_date = str(ev.get("ack_date") or "")
+        if not key or not re.match(r"^\d{4}-\d{2}-\d{2}$", ack_date):
+            return False, "Alert acknowledgement is incomplete"
+        cur.execute("INSERT OR IGNORE INTO alert_acks (user_id, alert_key, ack_date) VALUES (?, ?, ?)",
+                    (user["id"], key, ack_date))
+        return True, f"Acknowledged: {ev.get('reason') or key}"
+
+    admin = apply_admin_event(ev)
+    if admin:
+        return admin
     return False, f"Unknown action {action}"
 
 
@@ -349,7 +550,8 @@ def sync():
                                    user_id, device, device_time, server_time, result, message)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (event_id, ev.get("action"), str(ev.get("serial") or ""), str(ev.get("participant") or ""),
-             str(ev.get("visit") or ""), str(ev.get("reason") or ""), str(ev.get("product") or ""),
+             str(ev.get("visit") or ""), str(ev.get("reason") or ""),
+             str(ev.get("product") or ev.get("alert_key") or ""),
              user["id"], str(ev.get("device") or "")[:120], str(ev.get("device_time") or ""),
              iso_now(), result, message),
         )

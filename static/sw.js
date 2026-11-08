@@ -1,7 +1,7 @@
 // Keeps the app and the label reader on the device so the app opens without internet.
-const CACHE = "kit-tracker-v1";
+const CACHE = "kit-tracker-v2";
 const SHELL = [
-  "/", "/index.html", "/app.js", "/label.js", "/manifest.webmanifest",
+  "/", "/index.html", "/app.js", "/label.js", "/alerts.js", "/manifest.webmanifest",
   "/vendor/tesseract/tesseract.min.js", "/vendor/tesseract/worker.min.js",
   "/vendor/tesseract-core/tesseract-core-lstm.js",
   "/vendor/tesseract-core/tesseract-core-lstm.wasm",

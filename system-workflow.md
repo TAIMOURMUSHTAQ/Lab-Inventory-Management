@@ -14,36 +14,74 @@ connection, then synchronizes them when connectivity returns.
 4. The device may continue an already authenticated shift offline; first-time
    sign-in still requires a connection.
 
+## Studies, protocols and visits
+
+A study has protocols. A protocol has a visit schedule, and each visit lists the
+kit types it needs. The current records are dummy data. Admin can add more.
+
 ## Receive workflow
 
-1. Point the iPhone camera at the kit barcode and label.
-2. The browser barcode reader fills the serial; on supported browsers this is
-   decoded directly and otherwise OCR attempts to read the printed serial.
-3. OCR fills the label fields; manual entry is only the fallback.
-3. Verify kit type, lot, expiry, and product/protocol against the physical box.
-4. Save the receipt.
+1. Select **Take photo** or **Upload image**. Both use the same reader.
+2. The reader fills the serial, kit type and expiry, and the lot when readable.
+   A barcode fills the serial only if OCR misses it and the browser supports
+   barcode reading.
+3. The app suggests where the kit goes:
+   - the protocol printed on the label, if it is a configured protocol code
+   - otherwise the only protocol needing that kit type
+   - if several need it, the person chooses a protocol or unallocated stock
+   - if none need it, unallocated stock
+4. Verify the fields against the physical kit and save.
 5. The app stores the action locally first and marks it as pending if it cannot
    reach the server.
-6. The server accepts only kit types A-J, a non-empty lot, a valid ISO expiry,
-   and a non-expired kit. Duplicate serials are rejected.
+6. The server accepts a kit type of one or two letters, a valid ISO expiry, a
+   non-expired kit and a known protocol. Duplicate serials are rejected. Lot is
+   optional. Each serial is one kit.
 
-The camera reader does not read the serial. The serial always comes from the
-scanner or manual entry.
+## Allocation workflow
+
+The Sheet lists an allocation control for every in-stock kit. A kit can move to
+any protocol or back to unallocated stock. Each move is an audited event.
+Allocating to a protocol with no visit for that kit type is allowed.
 
 ## Use workflow
 
-1. Select **Use** and scan the box serial.
+1. Select **Use** and read or type the serial.
 2. Enter participant initials.
-3. Select the visit configured for the kit type.
-4. The configured protocol quantity is selected automatically for that visit.
-5. If the visit is not planned for that kit, select **Other** or an
-   unplanned visit and provide a reason.
-6. Record the use.
+3. Select the protocol and visit. The kit's protocol is preselected, with the
+   visits that need this kit first.
+4. If the visit is not planned for that kit, select **Other** or an unplanned
+   visit and provide a reason.
+5. Record the use.
 
-Only an in-stock, non-expired kit can be used. A successful use deducts the
-configured quantity from `remaining_quantity`, records the participant and
-visit, and changes the status to `used` when the remaining quantity reaches
-zero.
+Only an in-stock, non-expired, allocated kit can be used. Using an unallocated
+kit, or choosing another protocol, moves the kit there first. A successful use
+records the participant and visit and changes the status to `used`.
+
+## Alert workflow
+
+Alerts are worked out on the device from the kits it holds, including actions
+still waiting to send, so they also work offline.
+
+- **Expiry:** an in-stock kit expiring within `expiry_days` (default 30), or
+  already expired.
+- **Low stock, all stock:** usable kits of a type at or below `low_stock_total`
+  (default 5).
+- **Low stock, per protocol:** usable kits of a type allocated to a protocol at
+  or below `low_stock_protocol` (default 5).
+
+A kit type can have its own quantity for all stock or for one protocol. A scope
+is checked only once it has held stock of that type.
+
+The pop-up opens when the app opens, after a use or removal, and after receiving
+a kit that is close to expiry. Acknowledging records an audited event and hides
+the alert for that person until the next day. An alert for a lower count is a
+new alert.
+
+## Admin workflow
+
+The Admin tab changes alert settings and adds studies, protocols and visits. It
+needs a connection, because the changes apply to everyone. Any signed-in user can
+make these changes for now. Each one is an audited event.
 
 ## Remove workflow
 
@@ -77,8 +115,8 @@ change kit stock.
 
 ## Outputs
 
-- **Sheet:** current kit inventory, total quantity, remaining quantity, status,
-  lot, expiry, usage, receiver, and pending state.
+- **Sheet:** usable quantity by kit type, then current kits with allocation,
+  status, lot, expiry, usage, receiver, and pending state.
 - **Audit:** up to the latest 500 events, including server timestamp, user,
   action, target, result, and message.
 - **CSV:** a locally generated Excel-compatible CSV that also includes pending
@@ -114,10 +152,8 @@ change kit stock.
 - Set a strong persistent `KIT_SECRET`.
 - Set a durable `KIT_DB` or migrate to a managed relational database for
   multi-instance hosting.
-- Provide the signed kit-type/visit deduction table. Staging currently uses
-  quantity `1` for every configured visit; this is a safe placeholder, not the
-  final protocol.
-- Replace demo protocol values and seed users.
+- Replace the dummy studies, protocols and visits with the signed protocols.
+- Replace the seed users, and decide who may use the Admin tab.
 - Configure HTTPS, backups, logging, and access controls.
 - Complete device OCR testing and required privacy/compliance agreements before
   real participant data is used.

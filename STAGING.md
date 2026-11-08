@@ -26,43 +26,44 @@ with disposable fixtures, never for inventory records.
 3. Select `render.yaml`.
 4. Deploy the service.
 5. Open the generated `https://...onrender.com` address in Safari.
-6. Confirm the login page, camera permission, barcode capture, OCR autofill,
-   receive, repeated quantity deductions, removal, sign-off, sheet, CSV, and
-   audit workflows.
+6. Confirm the login page, take photo, upload image, OCR autofill, receive,
+   allocation, use, removal, sign-off, alerts, admin, sheet, CSV, and audit
+   workflows.
 7. Run `python3 server.py seed` only against a controlled staging database if
    demo logins are required. Store the generated passwords in a secure channel.
 
 ## Staging acceptance checklist
 
 - [ ] HTTPS URL opens on iPhone Safari
-- [ ] Camera permission is granted
-- [ ] Barcode fills the serial
+- [ ] Take photo opens the iPhone camera
+- [ ] Upload image picks from the photo library
+- [ ] A full-size iPhone photo is read without the page failing, and the time is recorded
 - [ ] The deployed URL is opened on the phone itself, not only in a Mac tab
-- [ ] The rear camera is selected on iPhone
-- [ ] A label photo can be used when live OCR is difficult
 - [ ] OCR is tested with the label rotated 0, 90, and 270 degrees
 - [ ] OCR is tested with expiry adjacent to lot text
 - [ ] OCR result is reviewed before saving
-- [ ] OCR fills kit type, lot, expiry, and visit
+- [ ] OCR fills serial, kit type, and expiry, including kits I, J, and K
 - [ ] User can correct a field before saving
 - [ ] Duplicate serial is rejected
-- [ ] Protocol quantity is deducted on each use scan
-- [ ] Remaining quantity reaches zero at the correct scan
+- [ ] A kit needed by one protocol is suggested for that protocol
+- [ ] A kit needed by several protocols asks the person to choose
+- [ ] A kit needed by none goes to unallocated stock and can be allocated later
+- [ ] The expiry alert appears at the set number of days
+- [ ] The low stock alert appears overall and per protocol at the set quantity
+- [ ] An acknowledged alert stays hidden that day and returns the next day
+- [ ] Admin changes to alert settings take effect and appear in the audit
 - [ ] Further use is rejected
 - [ ] Offline receive/use queue resends after reconnection
-- [ ] CSV includes quantity and remaining quantity
+- [ ] CSV includes kit type, expiry, study, and protocol
 - [ ] Audit displays accepted and rejected events
 - [ ] Restart does not lose staging data
 - [ ] No real participant data is used in staging
-- [ ] Every kit-type/visit rule has a configured deduction quantity
-- [ ] A missing quantity rule blocks the transaction
-- [ ] Repeated scans deduct the configured quantity, not a hard-coded default
 
 ## Before production
 
-- Replace the demo protocol quantities with the signed table.
-- Load the complete matrix of kit type, visit, and units-to-deduct before
-  accepting a real transaction.
+- Replace the dummy studies, protocols and visits with the signed schedules
+  before accepting a real transaction.
+- Decide who may use the Admin tab.
 - Replace demo accounts with managed user accounts and password reset.
 - Confirm backup/restore for the database.
 - Review retention, access, and privacy requirements.

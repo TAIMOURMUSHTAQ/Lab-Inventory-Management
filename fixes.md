@@ -27,6 +27,9 @@ The local application was checked through the browser and server boundary:
 | QA-006 | High | Phone scanning | The receive reader could use the wrong camera on desktop, and the use workflow had no phone-camera scan action. | Mobile devices now request the rear camera, use mode has its own scan button, and label-photo OCR is available as a fallback. |
 | QA-007 | High | OCR accuracy | Small rotated label text, especially compact expiry text adjacent to lot text, was often missed by a single full-frame OCR pass. | The free local reader now runs rotated, cropped, enlarged, contrast-stretched passes and supports photo OCR; date parsing accepts compact and numeric separators while validating real calendar dates. |
 | QA-008 | High | OCR result selection | The reader selected only one “best” OCR pass, so a pass that found the expiry could be discarded when another pass found the kit type. | OCR passes now merge valid fields across rotations/crops before presenting the result. |
+| QA-009 | High | Live camera | Live video reading was slow and unreliable on phones. | Removed. Take photo and upload now use one still-image reader, with phone photos limited to a size phone browsers can draw. |
+| QA-010 | High | Kit types | Kit K and later were refused by the server and missed by the label reader, and a capital I read as a lowercase l would have become L. | Any letter is accepted, and `l` is read as `I`. |
+| QA-011 | Medium | Form entry | Any re-render, such as a background send finishing, could erase what was being typed or read. | Forms keep their values across re-renders and clear only after a successful save. |
 
 ## Remaining risks before hosting
 
