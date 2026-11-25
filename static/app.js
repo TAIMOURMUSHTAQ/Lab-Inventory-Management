@@ -9,7 +9,7 @@
   const $ = (sel, root) => (root || document).querySelector(sel);
   const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const APP_VERSION = "v3";   // keep the same as CACHE in sw.js
+  const APP_VERSION = "v4";   // keep the same as CACHE in sw.js
   const KEYS = { session: "kit.session", snap: "kit.snap.v3", queue: "kit.queue",
                  rejected: "kit.rejected", device: "kit.device" };
   const SHIFT_FALLBACK_HOURS = 8;
@@ -1051,9 +1051,12 @@
   }
 
   // Finds a study ID in the label text, ignoring OCR spacing and one misread character.
-  function studyOnLabel(text) {
+  function studyOnLabel(text, protocol) {
     const squeeze = (v) => String(v).toUpperCase().replace(/[^A-Z0-9]/g, "");
-    const label = squeeze(text);
+    // The protocol read from the label, else the whole text without its field names,
+    // so the printed word "Protocol" never passes for a study code like PROTO-A.
+    const label = protocol ? squeeze(protocol)
+      : squeeze(String(text).replace(/\b(Protocol|Lot|Expiry|Expiration|Visits?|Kit\s*Type)\b/gi, " "));
     const distance = window.LabelReader.editDistance;
     const near = (code) => {
       if (label.includes(code)) return true;
@@ -1093,7 +1096,7 @@
         onProgress: setReadOut,
         isKnown: (serial) => localBoxes().some((b) => b.serial === serial),
       });
-      const labelStudyId = studyOnLabel(best.text);
+      const labelStudyId = studyOnLabel(best.text, best.protocol);
       if (image.close) image.close();
       if (S.mode === mode && S.tab === "scan") fillFromReading(best, mode, labelStudyId);
     } catch (e) {

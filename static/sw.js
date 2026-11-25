@@ -1,7 +1,7 @@
 // Keeps the app and the label reader on the device so the app opens without internet.
 // App files come from the network first so a new release arrives straight away;
 // the saved copy is used when offline. Large reader files only change with this name.
-const CACHE = "kit-tracker-v3";   // keep the same as APP_VERSION in app.js
+const CACHE = "kit-tracker-v4";   // keep the same as APP_VERSION in app.js
 const APP_FILES = ["/", "/index.html", "/app.js", "/label.js", "/alerts.js", "/reader.js", "/manifest.webmanifest"];
 const READER_FILES = [
   "/vendor/tesseract/tesseract.min.js", "/vendor/tesseract/worker.min.js",

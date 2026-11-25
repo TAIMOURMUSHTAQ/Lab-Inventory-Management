@@ -81,6 +81,31 @@
     return "";
   }
 
+  // Words printed as field names, never values.
+  const FIELD_WORDS = /^(PROTOCOL|LOT|EXPIRY|EXPIRATION|VISIT|VISITS|KIT|TYPE|PLACE)$/;
+
+  // "Kit Type J", "Kit Type HLA" or "Kit Type PK2".
+  function kitType(compact) {
+    const kit = /\bKit\s*Type\s*[:;.]?\s*([A-Za-z1][A-Za-z0-9]{0,5})(?![A-Za-z0-9])/i.exec(compact) ||
+      /\bK\w{0,3}\s*Type\s*[:;.]?\s*([A-Za-z1][A-Za-z0-9]{0,5})(?![A-Za-z0-9])/i.exec(compact) ||
+      /\bT?ype\s*[:;.]?\s*([A-Za-z1][A-Za-z0-9]{0,5})(?![A-Za-z0-9])/i.exec(compact);
+    if (!kit) return "";
+    const v = kit[1];
+    // OCR often reads a capital I as a lowercase l or a 1.
+    if (v.length === 1) return v === "l" || v === "1" ? "I" : v.toUpperCase();
+    // Longer kit names are printed in capitals; mixed case is the next word, not the kit.
+    if (!/^[A-Z][A-Z0-9]{1,5}$/.test(v) || FIELD_WORDS.test(v)) return "";
+    return v;
+  }
+
+  // The code printed after a field name: letters and digits joined by dashes, e.g. ORX750-202.
+  function codeAfter(compact, label) {
+    const m = new RegExp(label.source + "([A-Za-z0-9]+(?:\\s*[-–—]\\s*[A-Za-z0-9]+)*)", "i").exec(compact);
+    if (!m) return "";
+    const v = m[1].toUpperCase().replace(/\s*[-–—]\s*/g, "-");
+    return /\d/.test(v) && v.length >= 4 && !FIELD_WORDS.test(v) ? v : "";
+  }
+
   function parseLabel(raw) {
     const text = String(raw || "").replace(/[|]/g, "I");
     const compact = text.replace(/\s+/g, " ").trim();
@@ -89,16 +114,12 @@
 
     out.serial = parseSerial(compact);
 
-    const kit = /\bKit\s*Type\s*([A-Z1])(?![A-Za-z0-9])/i.exec(compact) ||
-      /\bK\w{0,3}\s*Type\s*([A-Z1])(?![A-Za-z0-9])/i.exec(compact) ||
-      /\bT?ype\s*([A-Z1])(?![A-Za-z0-9])/i.exec(compact);
-    // OCR often reads a capital I as a lowercase l or a 1.
-    if (kit) out.kit_type = kit[1] === "l" || kit[1] === "1" ? "I" : kit[1].toUpperCase();
-    else out.kit_type = kitNearVisit(lines);
+    out.kit_type = kitType(compact) || kitNearVisit(lines);
     if (!out.kit_type) out.problems.push("Kit type not found");
 
     const proto = /TAK\s*[-–—]?\s*\d{3}\s*[-–—]\s*\d{4}/i.exec(compact);
     if (proto) out.protocol = proto[0];
+    else out.protocol = codeAfter(compact, /\bProt\w{0,5}\s*[:;.,]?\s*/i);
 
     // Lot numbers look like TKDA0215-TPCUS535228 or TKDA0215-248128
     const lot = /T[KX]DA\s*[0-9OQ]{3,4}\s*[-–—]\s*([A-Z0-9]{5,})/i.exec(compact);
@@ -107,7 +128,12 @@
       const tail = lot[1].toUpperCase().replace(/^(TPCU[S5])?(.*)$/, (_, head, rest) => (head ? "TPCUS" : "") + digits(rest));
       const head = lot[0].slice(0, lot[0].length - lot[1].length).toUpperCase().replace(/[\s–—]/g, "").replace(/^TX/, "TK").replace(/[OQ]/g, "0");
       out.lot = (head.endsWith("-") ? head : `${head}-`) + tail;
-    } else out.problems.push("Lot not found");
+    } else {
+      // Other sponsors: whatever follows "Lot/Expiry:", up to the slash before the date.
+      const generic = codeAfter(compact, /\bLot\s*(?:[/I1l]\s*)?(?:E\w{0,2}p\w*)?\s*[:;.,]?\s*/i);
+      if (generic && generic.length >= 5 && !parseExpiry(generic)) out.lot = generic;
+      else out.problems.push("Lot not found");
+    }
 
     out.expiry_seen = parseExpiry(compact, true) || "";
     const exp = parseExpiry(compact);
